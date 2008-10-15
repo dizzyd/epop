@@ -1,6 +1,6 @@
 {application, epop,
  [{description, "Erlang POP3 client/server"},
-  {vsn, "1.1"},
+  {vsn, "1.2"},
   {modules, [epop,
              epop_biff,
              epop_client,
