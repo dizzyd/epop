@@ -244,6 +244,11 @@ complete_sl_lf(S,[H|T],Line) ->
 complete_sl_lf(S,[],Line) ->
     complete_sl_lf(S,recv(S),Line).
 
+recv({Mod, Sock}) ->
+    case Mod:recv(Sock, 0) of
+        {ok, Packet} -> Packet;
+        Else         -> exit(Else)
+    end;
 recv(S) ->
     case gen_tcp:recv(S,0) of
 	{ok,Packet} -> Packet;

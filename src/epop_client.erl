@@ -38,6 +38,7 @@
 	     sockfd,          % Socket filedesc.
 	     port=110,        % The POP3 server port number
 	     apop=false,      % Use APOP authentication if true.
+             sockmod=gen_tcp, % Module to use for socket interactions (may be set to 'ssl')
 	     snoop=false}).   % Trace on/off
 
 %% ----------------------------------------------
@@ -52,7 +53,7 @@ accept(Lsock,Passwd,Options) when list(Passwd),list(Options) ->
 
 do_accept(Lsock,Passwd,Options) ->
     S = init_options(false,false,Options),
-    case gen_tcp:accept(Lsock) of
+    case (S#sk.sockmod):accept(Lsock) of
 	{ok,Sock} ->
 	    parse_notification(S#sk{sockfd=Sock},Passwd);
 	Else ->
@@ -60,7 +61,7 @@ do_accept(Lsock,Passwd,Options) ->
     end.
 
 parse_notification(S,Passwd) ->
-    case recv_sl(S#sk.sockfd) of
+    case recv_sl({S#sk.sockmod, S#sk.sockfd}) of
 	{[$N,$T,$F,$Y|T],_} ->
 	    User = parse_user(T),
 	    answer_greeting(S#sk{user=User},Passwd,T);
@@ -94,7 +95,7 @@ connect(User,Passwd,Options) when list(User),list(Passwd),list(Options) ->
 do_connect(User,Passwd,Options) when list(User),list(Passwd),list(Options) ->
     S = init_session(User,Options),
     Opts = [{packet,raw},{reuseaddr,true},{active,false}],
-    case gen_tcp:connect(S#sk.addr,S#sk.port,Opts) of
+    case (S#sk.sockmod):connect(S#sk.addr,S#sk.port,Opts) of
 	{ok,Sock} -> get_greeting(S#sk{sockfd=Sock},Passwd);
 	_         -> {error,connect_failed}
     end.
@@ -104,7 +105,7 @@ do_connect(User,Passwd,Options) when list(User),list(Passwd),list(Options) ->
 %% perform the specified authentication procedure.
 
 get_greeting(S,Passwd) ->
-    case recv_sl(S#sk.sockfd) of
+    case recv_sl({S#sk.sockmod, S#sk.sockfd}) of
 	{[$+,$O,$K|T],_} ->
 	    answer_greeting(S,Passwd,T);
 	{[$-,$E,$R,$R|T],_} ->
@@ -140,7 +141,7 @@ parse_banner_timestamp(Banner) ->
 %% reply with the password.
 
 send_passwd(S,Passwd) ->
-    case recv_sl(S#sk.sockfd) of
+    case recv_sl({S#sk.sockmod, S#sk.sockfd}) of
 	{[$+,$O,$K|T],_} ->
 	    if_snoop(S,sender,"+OK" ++ T),
 	    Msg = "PASS " ++ Passwd,
@@ -163,7 +164,7 @@ stat(S) ->
     get_stat(S).
 
 get_stat(S) ->
-    case recv_sl(S#sk.sockfd) of
+    case recv_sl({S#sk.sockmod, S#sk.sockfd}) of
 	{[$+,$O,$K|T],_} ->
 	    if_snoop(S,sender,"+OK" ++ T),
 	    [NumMsg,TotSize] = string:tokens(T," \r\n"),
@@ -188,7 +189,7 @@ do_scan(S,Msg,MultiLine) ->
     get_scanlist(S,MultiLine).
 
 get_scanlist(S,MultiLine) ->
-    case scan_recv(S#sk.sockfd,MultiLine) of
+    case scan_recv({S#sk.sockmod, S#sk.sockfd}, MultiLine) of
 	{[$+,$O,$K|T],_} when MultiLine==true ->
 	    [Line1|Ls] = tokenize("+OK" ++ T),
 	    if_snoop(S,sender,Line1),
@@ -232,7 +233,7 @@ top(S,MsgNum,Lines) when integer(MsgNum), integer(Lines) ->
     get_retrieve(S).
 
 get_retrieve(S) ->
-    case recv_ml_on_ok(S#sk.sockfd) of
+    case recv_ml_on_ok({S#sk.sockmod, S#sk.sockfd}) of
 	{[$+,$O,$K|T],_} ->
 	    {Line,Ls} = get_line("+OK" ++ T),
 	    if (S#sk.snoop==true) ->
@@ -270,7 +271,7 @@ do_uidl(S,Msg,MultiLine) ->
     get_uidllist(S,MultiLine).
 
 get_uidllist(S,MultiLine) ->
-    case uidl_recv(S#sk.sockfd,MultiLine) of
+    case uidl_recv({S#sk.sockmod, S#sk.sockfd}, MultiLine) of
 	{[$+,$O,$K|T],_} when MultiLine==true ->
 	    [Line1|Ls] = tokenize("+OK" ++ T),
 	    if_snoop(S,sender,Line1),
@@ -336,7 +337,7 @@ quit(S) ->
 	      {ok,_} -> ok;
 	      Else   -> Else
 	  end,
-    gen_tcp:close(S#sk.sockfd),
+    (S#sk.sockmod):close(S#sk.sockfd),
     Res.
 
 %% ----------------------------------------------------
@@ -357,7 +358,7 @@ do_notify(S,Msg) ->
 %% ends this transaction.
 
 get_ok(S) ->
-    case recv_sl(S#sk.sockfd) of
+    case recv_sl({S#sk.sockmod, S#sk.sockfd}) of
 	{[$+,$O,$K|T],_} ->
 	    if_snoop(S,sender,"+OK" ++ T),
 	    {ok,S};
@@ -370,7 +371,7 @@ get_ok(S) ->
 %% -----------------------------
 %% Send a CRLF terminated string
 
-deliver(S,Msg) -> gen_tcp:send(S#sk.sockfd,Msg ++ "\r\n").
+deliver(S,Msg) -> (S#sk.sockmod):send(S#sk.sockfd,Msg ++ "\r\n").
 
 
 %% ---------------------------------------
@@ -415,6 +416,8 @@ set_options([apop|T],S) ->
     set_options(T,S#sk{apop=true});
 set_options([upass|T],S) ->
     set_options(T,S#sk{apop=false});
+set_options([{sockmod, ssl}|T], S) ->
+    set_options(T,S#sk{sockmod=ssl});
 set_options([X|_],_) ->
     throw({error,{unknown_option,X}});
 set_options([],S) ->
