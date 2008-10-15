@@ -177,7 +177,7 @@ recv_ml_on_ok(S) ->
 
 recv_3_chars(S) -> recv_3_chars(S,recv(S)).
 
-recv_3_chars(S,Cs) when length(Cs)>=3 -> Cs;
+recv_3_chars(_S,Cs) when length(Cs)>=3 -> Cs;
 recv_3_chars(S,Cs) -> recv_3_chars(S,Cs ++ recv(S)).
 		    
 %% ------------------------------------------
@@ -212,8 +212,8 @@ rml(4,S,[H|T],[$.|Mline])     -> rml(1,S,[H|T],Mline);       % continue
 rml(5,S,[?LF|T],Mline)        -> rml(6,S,T,[?LF|Mline]);     % goto next state
 rml(5,S,[H|T],[$.|Mline])     -> rml(1,S,[H|T],Mline);       % (de-)byte stuff
 
-rml(6,S,T,[?LF,?CR,$.|Mline]) -> {lists:reverse(Mline),T};   % accept
-rml(6,S,T,[?LF,$.|Mline])     -> {lists:reverse(Mline),T};   % accept
+rml(6,_S,T,[?LF,?CR,$.|Mline]) -> {lists:reverse(Mline),T};   % accept
+rml(6,_S,T,[?LF,$.|Mline])     -> {lists:reverse(Mline),T};   % accept
 
 rml(State,S,[],Mline)         -> rml(State,S,recv(S),Mline). % get more
 
@@ -237,9 +237,9 @@ complete_sl(S,[H|T],Line) ->
 complete_sl(S,[],Line) ->
     complete_sl(S,recv(S),Line).
 
-complete_sl_lf(S,[?LF|T],Line) ->
+complete_sl_lf(_S,[?LF|T],Line) ->
     {lists:reverse([?LF|Line]),T};
-complete_sl_lf(S,[H|T],Line) ->
+complete_sl_lf(S,[_|T],Line) ->
     complete_sl(S,T,[?LF|Line]);
 complete_sl_lf(S,[],Line) ->
     complete_sl_lf(S,recv(S),Line).

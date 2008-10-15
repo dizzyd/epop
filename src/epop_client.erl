@@ -251,9 +251,9 @@ get_retrieve(S) ->
 
 get_line(Str) -> 
     F = fun($\n) -> false;
-	   (C)   -> true
+	   (_)   -> true
 	end,
-    {Line,[Nl|Rest]} = lists:splitwith(F,Str),
+    {Line,[_|Rest]} = lists:splitwith(F,Str),
     {Line,Rest}.
 
 %% -------------------
